@@ -13,7 +13,7 @@ API_ID = '23394165'
 API_HASH = '20f2e730713df85dee458ebe8665c1cd'
 BOT_TOKEN = '8346690749:AAGeVgyJD0DarEENVZjGWq0D3nKMvoZ4BcE'
 ALLOWED_FORMATS = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/x-flac', 'audio/x-wav', 'audio/wave']
-MAX_DURATION_SECONDS = 60
+MAX_DURATION_SECONDS = 30
 TRIM_MS_MP3 = 20
 MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1 ГБ
 MAX_CACHE_SIZE = 1000
@@ -59,23 +59,26 @@ async def analyze_audio(audio_path, file_hash, mime_type):
         else:
             bpm_display = int(bpm) + 1
         
-        # Тональность (усреднение по сегментам)
-        segment_duration = int(30 * sample_rate)  # 30 секунд
-        segments = [audio[i:i + segment_duration] for i in range(0, len(audio), segment_duration)][:2]
+        # Тональность (усреднение по 3 сегментам по 20 секунд)
+        segment_duration = int(20 * sample_rate)  # 20 секунд
+        segments = [audio[i:i + segment_duration] for i in range(0, len(audio), segment_duration)][:3]
         keys = []
         key_extractor = es.KeyExtractor(profileType='temperley')
         
-        for seg in segments:
+        for i, seg in enumerate(segments):
             if len(seg) >= sample_rate:
                 key, scale, _ = key_extractor(seg)
                 keys.append((key, scale))
+                logging.info(f"Сегмент {i+1}: Тональность {key} {scale}")
         
         if not keys:
             key, scale, _ = key_extractor(audio)
             keys.append((key, scale))
+            logging.info(f"Полное аудио: Тональность {key} {scale}")
         
         # Выбор наиболее частой тональности
         key, scale = Counter(keys).most_common(1)[0][0]
+        logging.info(f"Итоговая тональность: {key} {scale}")
         
         result = f"BPM: {bpm_display}\nТональность: {key} {scale}"
         
@@ -110,7 +113,7 @@ async def handle_audio(event):
                  '.wav' if mime_type in ['audio/wav', 'audio/x-wav', 'audio/wave'] else '.mp3'
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            await client.download_media(event.message.media, tmp_file)
+            await client.download_media(event.message.media, tmp_file, part_size=1024*1024)
             audio_path = tmp_file.name
         
         result = await analyze_audio(audio_path, file_hash, mime_type)
