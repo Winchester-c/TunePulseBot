@@ -15,7 +15,7 @@ BOT_TOKEN = '8346690749:AAGeVgyJD0DarEENVZjGWq0D3nKMvoZ4BcE'
 ALLOWED_FORMATS = ['audio/mpeg', 'audio/wav', 'audio/flac', 'audio/x-flac', 'audio/x-wav', 'audio/wave']
 MAX_DURATION_SECONDS = 60
 TRIM_MS_MP3 = 20
-MAX_FILE_SIZE = 50 * 1024 * 1024
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1 ГБ
 MAX_CACHE_SIZE = 1000
 
 # Настройка логирования
@@ -73,7 +73,7 @@ async def analyze_audio(audio_path, file_hash, mime_type):
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    await event.respond("Отправьте MP3, WAV или FLAC (до 50 МБ) для анализа BPM и тональности.")
+    await event.reply("Отправьте MP3, WAV или FLAC (до 1 ГБ) для анализа BPM и тональности.")
 
 @client.on(events.NewMessage)
 async def handle_audio(event):
@@ -83,17 +83,17 @@ async def handle_audio(event):
         logging.info(f"MIME-тип: {mime_type}, Размер файла: {file_size/1024/1024:.2f} МБ")
         
         if file_size > MAX_FILE_SIZE:
-            await event.respond(f"Файл слишком большой ({file_size/1024/1024:.2f} МБ). Максимум 50 МБ.")
+            await event.reply(f"Файл слишком большой ({file_size/1024/1024/1024:.2f} ГБ). Максимум 1 ГБ.")
             return
         
         if mime_type not in ALLOWED_FORMATS:
-            await event.respond(f"Отправьте MP3, WAV или FLAC файл. Получен MIME-тип: {mime_type}")
+            await event.reply(f"Отправьте MP3, WAV или FLAC файл. Получен MIME-тип: {mime_type}")
             return
         
         try:
             file_hash = hashlib.md5(str(event.message.media.document.id).encode()).hexdigest()
             if file_hash in cache:
-                await event.respond(cache[file_hash])
+                await event.reply(cache[file_hash])
                 return
             
             suffix = '.flac' if mime_type in ['audio/flac', 'audio/x-flac'] else \
@@ -104,12 +104,12 @@ async def handle_audio(event):
                 audio_path = tmp_file.name
             
             result = await analyze_audio(audio_path, file_hash, mime_type)
-            await event.respond(result)
+            await event.reply(result)
             
             os.unlink(audio_path)
             
         except Exception as e:
-            await event.respond(f"Ошибка: {str(e)}")
+            await event.reply(f"Ошибка: {str(e)}")
 
 print("Бот запущен...")
 client.run_until_disconnected()
