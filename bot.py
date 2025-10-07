@@ -1,7 +1,6 @@
 from telethon.sync import TelegramClient
 from telethon import events
-import librosa
-import numpy as np
+import essentia.standard as es
 import os
 import tempfile
 import logging
@@ -32,35 +31,35 @@ async def analyze_audio(audio_path, file_hash, mime_type):
         return cache[file_hash]
     
     def sync_analyze():
-        y, sr = librosa.load(audio_path, sr=None, mono=True, duration=MAX_DURATION_SECONDS)
-        logging.info(f"Анализ с частотой дискретизации: {sr} Гц")
+        loader = es.MonoLoader(filename=audio_path)
+        audio = loader()
+        sample_rate = 44100
+        logging.info(f"Анализ с частотой дискретизации файла (автоопределение)")
         
         if mime_type == 'audio/mpeg':
-            trim_samples = int(0.020 * sr)
-            y = y[trim_samples:]
+            trim_samples = int(0.020 * sample_rate)
+            audio = audio[trim_samples:]
             logging.info(f"Обрезано 20 мс ({trim_samples} сэмплов) для MP3")
         
-        if len(y) < sr:
-            return f"Аудио слишком короткое ({len(y)/sr:.2f} сек)."
+        max_samples = int(MAX_DURATION_SECONDS * sample_rate)
+        audio = audio[:min(len(audio), max_samples)]
         
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        if len(audio) < sample_rate:
+            return f"Аудио слишком короткое ({len(audio)/sample_rate:.2f} сек)."
         
-        fractional_part = tempo % 1
+        rhythm_extractor = es.RhythmExtractor2013(method="multifeature")
+        bpm, _, _, _, _ = rhythm_extractor(audio)
+        
+        fractional_part = bpm % 1
         if fractional_part < 0.25:
-            bpm_display = int(tempo)
+            bpm_display = int(bpm)
         elif fractional_part < 0.75:
-            bpm_display = int(tempo) + 0.5
+            bpm_display = int(bpm) + 0.5
         else:
-            bpm_display = int(tempo) + 1
+            bpm_display = int(bpm) + 1
         
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        key_profiles = {
-            'C': [0.181, 0.061, 0.104, 0.068, 0.148, 0.053, 0.099, 0.122, 0.051, 0.083, 0.053, 0.077],
-            'A♭': [0.077, 0.181, 0.061, 0.104, 0.068, 0.148, 0.053, 0.099, 0.122, 0.051, 0.083, 0.053]
-        }
-        correlations = {key: np.corrcoef(np.mean(chroma, axis=1), profile)[0, 1] for key, profile in key_profiles.items()}
-        key = max(correlations, key=correlations.get)
-        scale = 'major'
+        key_extractor = es.KeyExtractor(profileType='krumhansl')
+        key, scale, _ = key_extractor(audio)
         
         result = f"BPM: {bpm_display}\nТональность: {key} {scale}"
         
@@ -75,11 +74,14 @@ async def analyze_audio(audio_path, file_hash, mime_type):
 async def start(event):
     await event.reply("Отправьте MP3, WAV или FLAC (до 1 ГБ) для анализа BPM и тональности.")
 
-@client.on(events.NewMessage)
+@client.on(events.NewMessage(incoming=True))
 async def handle_audio(event):
     if event.message.media and event.message.media.document:
         mime_type = event.message.media.document.mime_type
         file_size = event.message.media.document.size
+        if mime_type not in ALLOWED_FORMATS:
+            return  # Игнорируем неаудио файлы
+        
         logging.info(f"MIME-тип: {mime_type}, Размер файла: {file_size/1024/1024:.2f} МБ")
         
         if file_size > MAX_FILE_SIZE:
