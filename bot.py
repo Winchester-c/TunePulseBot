@@ -25,7 +25,6 @@ client = TelegramClient('bot_session', API_ID, API_HASH)
 client.start(bot_token=BOT_TOKEN)
 
 cache = {}
-processed_messages = set()
 
 async def analyze_audio(audio_path, file_hash, mime_type):
     if file_hash in cache:
@@ -94,9 +93,8 @@ async def analyze_audio(audio_path, file_hash, mime_type):
 async def start(event):
     await event.reply("Отправьте MP3, WAV или FLAC (до 1 ГБ) для анализа BPM и тональности.")
 
-@client.on(events.NewMessage(incoming=True, func=lambda e: e.message.id not in processed_messages and e.message.media and e.message.media.document and e.message.media.document.mime_type in ALLOWED_FORMATS))
+@client.on(events.NewMessage(incoming=True, func=lambda e: e.message.media and e.message.media.document and e.message.media.document.mime_type in ALLOWED_FORMATS))
 async def handle_audio(event):
-    processed_messages.add(event.message.id)
     mime_type = event.message.media.document.mime_type
     file_size = event.message.media.document.size
     logging.info(f"MIME-тип: {mime_type}, Размер файла: {file_size/1024/1024:.2f} МБ")
@@ -115,7 +113,7 @@ async def handle_audio(event):
                  '.wav' if mime_type in ['audio/wav', 'audio/x-wav', 'audio/wave'] else '.mp3'
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            await client.download_media(event.message.media, tmp_file)  # Убран part_size
+            await client.download_media(event.message.media, tmp_file)
             audio_path = tmp_file.name
         
         result = await analyze_audio(audio_path, file_hash, mime_type)
