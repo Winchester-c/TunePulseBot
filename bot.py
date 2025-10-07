@@ -20,7 +20,6 @@ MAX_CACHE_SIZE = 1000
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Инициализация
 client = TelegramClient('bot_session', API_ID, API_HASH)
 client.start(bot_token=BOT_TOKEN)
 
@@ -86,10 +85,6 @@ async def handle_audio(event):
         
         if file_size > MAX_FILE_SIZE:
             await event.reply(f"Файл слишком большой ({file_size/1024/1024/1024:.2f} ГБ). Максимум 1 ГБ.")
-            return
-        
-        if mime_type not in ALLOWED_FORMATS:
-            await event.reply(f"Отправьте MP3, WAV или FLAC файл. Получен MIME-тип: {mime_type}")
             return
         
         try:
