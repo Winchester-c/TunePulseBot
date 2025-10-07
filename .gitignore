@@ -1,0 +1,5 @@
+venv/
+bot_session.session
+*.pyc
+__pycache__/
+*.pem
